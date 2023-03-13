@@ -1,8 +1,8 @@
-import { Bodies, Body, Vector } from "matter-js";
 import { type WebSocket } from "uWebSockets.js";
+import { Vector2 } from "arcade-physics/lib/math/Vector2";
+import { type Body } from "arcade-physics/lib/physics/arcade/Body";
 
 import {
-    CollisionCategory,
     type Emote,
     type Explosion,
     ObjectKind,
@@ -17,6 +17,7 @@ import { KillPacket } from "../../packets/sending/killPacket";
 import { type Map } from "../map";
 import { type Game } from "../game";
 import { GameObject } from "../gameObject";
+import { Obstacle } from "./obstacle";
 
 export class Player extends GameObject {
     socket: WebSocket<any>;
@@ -26,7 +27,7 @@ export class Player extends GameObject {
     teamId = 1; // For 50v50?
     groupId: number;
 
-    direction: Vector = Vector.create(1, 0);
+    direction: Vector2 = Vector2.RIGHT;
     scale = 1;
     private _zoom = 28; // 1x scope
     xCullingDistance = this._zoom + 20;
@@ -86,6 +87,8 @@ export class Player extends GameObject {
     explosions: Explosion[];
 
     body: Body;
+    meleeBody: Body;
+
     deadBody: DeadBody;
 
     loadout: {
@@ -100,7 +103,7 @@ export class Player extends GameObject {
 
     quit = false;
 
-    constructor(id: number, position: Vector, socket: WebSocket<any>, game: Game, username: string, loadout) {
+    constructor(id: number, position: Vector2, socket: WebSocket<any>, game: Game, username: string, loadout) {
         super(id, "", position, 0);
         this.kind = ObjectKind.Player;
 
@@ -136,23 +139,23 @@ export class Player extends GameObject {
         this.name = username;
 
         // Init body
-        this.body = Bodies.circle(position.x, position.y, 1, { restitution: 0, friction: 0, frictionAir: 0, inertia: Infinity });
-        this.body.collisionFilter.category = CollisionCategory.Player;
-        this.body.collisionFilter.mask = CollisionCategory.Obstacle;
-        this.game.addBody(this.body);
+        this.body = this.game.physics.add.body(position.x, position.y);
+        this.body.setCircle(1);
+        // this.body.setCollideWorldBounds(true, 0, 0, null);
+        for(const object of this.game.objects) {
+            if(object instanceof Obstacle && object.collidable) {
+                this.game.physics.add.collider(this.body, object.body!);
+            }
+        }
     }
 
     setVelocity(xVel: number, yVel: number): void {
         this.moving = true;
-        Body.setVelocity(this.body, { x: xVel, y: yVel });
+        this.body.setVelocity(xVel, yVel);
     }
 
-    get position(): Vector {
+    get position(): Vector2 {
         return this.body.position;
-    }
-
-    set position(position: Vector) {
-        Body.setPosition(this.body, position);
     }
 
     get zoom(): number {

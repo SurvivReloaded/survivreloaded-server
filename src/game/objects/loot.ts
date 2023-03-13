@@ -1,9 +1,9 @@
-import { Bodies, type Vector } from "matter-js";
+import { type Vector2 } from "arcade-physics/lib/math/Vector2";
 
-import { CollisionCategory, ObjectKind, removeFrom, type SurvivBitStream } from "../../utils";
+import { ObjectKind, removeFrom, type SurvivBitStream } from "../../utils";
 import { type Game } from "../game";
 import { GameObject } from "../gameObject";
-import { Player } from "./player";
+import { type Player } from "./player";
 import { PickupMsgType, PickupPacket } from "../../packets/sending/pickupPacket";
 
 export class Loot extends GameObject {
@@ -14,28 +14,25 @@ export class Loot extends GameObject {
 
     constructor(id: number,
                 typeString: string,
-                position: Vector,
+                position: Vector2,
                 layer: number,
                 game: Game,
                 count: number) {
         super(id, typeString, position, layer, undefined, game);
         this.kind = ObjectKind.Loot;
         this.count = count;
-        this.body = Bodies.circle(position.x, position.y, 1);
-        this.body.collisionFilter.group = CollisionCategory.Loot;
-        this.body.collisionFilter.category = CollisionCategory.Player;
-        this.body.collisionFilter.mask = CollisionCategory.Obstacle | CollisionCategory.Player;
-        this.game!.addBody(this.body);
+        this.body = this.game!.physics.add.body(position.x, position.y);
+        this.body.setCircle(1);
     }
 
-    get position(): Vector {
+    get position(): Vector2 {
         return this.body!.position;
     }
 
     interact(p: Player): void {
         removeFrom(this.game!.objects, this);
         this.game!.deletedObjects.push(this);
-        this.game!.removeBody(this.body);
+        this.body!.destroy();
         this.interactable = false;
         p.sendPacket(new PickupPacket(p, this.typeString!, this.count, PickupMsgType.Success));
     }

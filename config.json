@@ -5,12 +5,12 @@
   "keyFile": "config/key.pem",
   "certFile": "config/cert.pem",
 
-  "tickDelta": 30,
-  "movementSpeed": 0.22,
-  "debugFeatures": {
+  "tickDelta": 33.3,
+  "movementSpeed": 12,
+  "debug": {
     "performanceLog": true,
     "performanceLogInterval": 200,
     "minimalMapGeneration": false,
-    "fixedSpawnLocation": []
+    "fixedSpawnLocation": [450, 150]
   }
 }

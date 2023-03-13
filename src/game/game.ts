@@ -1,16 +1,15 @@
 import crypto from "crypto";
 import {
-    DebugFeatures,
+    Config,
+    Debug,
     type Emote,
     type Explosion,
-    Config, log,
+    log,
     randomVec,
     removeFrom,
-    SurvivBitStream as BitStream,
-    unitVecToRadians,
-    Weapons
+    SurvivBitStream as BitStream
 } from "../utils";
-import { Bodies, type Body, Collision, Composite, Engine, Vector } from "matter-js";
+import { ArcadePhysics } from "arcade-physics";
 import { Map } from "./map";
 import { Player } from "./objects/player";
 import { AliveCountsPacket } from "../packets/sending/aliveCountsPacket";
@@ -19,6 +18,7 @@ import { JoinedPacket } from "../packets/sending/joinedPacket";
 import { MapPacket } from "../packets/sending/mapPacket";
 import { type KillPacket } from "../packets/sending/killPacket";
 import { type GameObject } from "./gameObject";
+import { Vector2 } from "arcade-physics/lib/math/Vector2";
 
 export class Game {
 
@@ -66,13 +66,13 @@ export class Game {
     explosions: Explosion[] = [];
     kills: KillPacket[] = [];
 
-    engine: Engine;
+    readonly physics: ArcadePhysics;
 
     // Red zone
     gasMode: number;
     initialGasDuration: number;
-    oldGasPosition: Vector;
-    newGasPosition: Vector;
+    oldGasPosition: Vector2;
+    newGasPosition: Vector2;
     oldGasRadius: number;
     newGasRadius: number;
 
@@ -81,18 +81,26 @@ export class Game {
      */
     active = true;
 
+    tickDelta: number;
+
     constructor() {
         this.id = crypto.createHash("md5").update(crypto.randomBytes(512)).digest("hex");
 
         this.gasMode = 0;
         this.initialGasDuration = 0;
-        this.oldGasPosition = Vector.create(360, 360);
-        this.newGasPosition = Vector.create(360, 360);
+        this.oldGasPosition = new Vector2(360, 360);
+        this.newGasPosition = new Vector2(360, 360);
         this.oldGasRadius = 2048;
         this.newGasRadius = 2048;
 
-        this.engine = Engine.create();
-        this.engine.gravity.scale = 0; // Disable gravity
+        //this.tickDelta = 1000 / Config.ticksPerSecond;
+        //console.log(Config.ticksPerSecond, this.tickDelta);
+        this.tickDelta = 33;
+        this.physics = new ArcadePhysics({
+            width: 720,
+            height: 720,
+            gravity: { x: 0, y: 0 }
+        });
 
         this.map = new Map(this, "main");
 
@@ -109,7 +117,7 @@ export class Game {
             if(!this.active) return;
 
             // Update physics
-            Engine.update(this.engine, Config.tickDelta);
+            this.physics.world.update(performance.now(), Config.tickDelta);
 
             // First loop: Calculate movement & animations.
             for(const p of this.activePlayers) {
@@ -128,15 +136,7 @@ export class Game {
                 else if(p.movingDown) p.setVelocity(0, -s);
                 else if(p.movingLeft) p.setVelocity(-s, 0);
                 else if(p.movingRight) p.setVelocity(s, 0);
-
-                if(p.moving) { // Collision detection w/ map edges
-                    if(p.position.x < 0) p.position.x = 0;
-                    if(p.position.x > 720) p.position.x = 720;
-                    if(p.position.y < 0) p.position.y = 0;
-                    if(p.position.y > 720) p.position.y = 720;
-                } else {
-                    p.setVelocity(0, 0);
-                }
+                if(!p.moving) p.setVelocity(0, 0);
 
                 if(p.shootStart) {
                     p.shootStart = false;
@@ -152,17 +152,21 @@ export class Game {
                         }
 
                         // If the player is punching anything, damage the closest object
-                        let maxDepth = -1;
+                        /* let maxDepth = -1;
                         let closestObject;
                         const weapon = Weapons[p.loadout.meleeType];
                         const angle: number = unitVecToRadians(p.direction);
-                        const offset: Vector = Vector.add(weapon.attack.offset, Vector.mult(Vector.create(1, 0), p.scale - 1));
-                        const position: Vector = Vector.add(p.position, Vector.rotate(offset, angle));
+                        const offset: Vector2 = new Vector2(weapon.attack.offset.x, weapon.attack.offset.y).add(new Vector2(1, 0).multiply(p.scale - 1));
+                        const position: Vector2 = p.position.add(offset.rotate(angle));
                         const body: Body = Bodies.circle(position.x, position.y, 0.9);
                         for(const object of p.visibleObjects) {
                             if(!object.body || object.dead || object === p) continue;
                             if(object.damageable) {
-                                // @ts-expect-error The 3rd argument for Collision.collides is optional
+                                // @ts-expect-error If object.damageable is true, object.damage is available
+                                object.damage(24, p);
+                                // @ts-expect-error If object.damageable is true, object.damage is available
+                                if(object.isDoor) object.interact(p);
+                                /* // @ts-expect-error The 3rd argument for Collision.collides is optional
                                 const collision = Collision.collides(body, object.body);
                                 if(collision && collision.depth > maxDepth) {
                                     maxDepth = collision.depth;
@@ -170,10 +174,10 @@ export class Game {
                                 }
                             }
                         }
-                        if(closestObject) {
+                        /* if(closestObject) {
                             closestObject.damage(24, p);
                             if(closestObject.interactable) closestObject.interact(p);
-                        }
+                        } */
                     }
                 }
 
@@ -267,9 +271,9 @@ export class Game {
             this.aliveCountDirty = false;
 
             const tickTime: number = performance.now() - tickStart;
-            if(DebugFeatures.performanceLog) {
+            if(Debug.performanceLog) {
                 this.tickTimes.push(tickTime);
-                if(this.tickTimes.length === DebugFeatures.performanceLogInterval) {
+                if(this.tickTimes.length === Debug.performanceLogInterval) {
                     let tickSum = 0;
                     for(const time of this.tickTimes) tickSum += time;
                     log(`Average ms/tick: ${tickSum / this.tickTimes.length}`);
@@ -283,7 +287,7 @@ export class Game {
 
     addPlayer(socket, username, loadout): Player {
         let spawnPosition;
-        if(DebugFeatures.fixedSpawnLocation.length) spawnPosition = Vector.create(DebugFeatures.fixedSpawnLocation[0], DebugFeatures.fixedSpawnLocation[1]);
+        if(Debug.fixedSpawnLocation.length) spawnPosition = new Vector2(Debug.fixedSpawnLocation[0], Debug.fixedSpawnLocation[1]);
         else spawnPosition = randomVec(75, this.map.width - 75, 75, this.map.height - 75);
 
         const p = new Player(this.nextObjectId, spawnPosition, socket, this, username, loadout);
@@ -309,7 +313,7 @@ export class Game {
     }
 
     removePlayer(p): void {
-        p.direction = Vector.create(1, 0);
+        p.direction = new Vector2(1, 0);
         p.quit = true;
         this.deletedPlayers.push(p);
         this.partialDirtyObjects.push(p);
@@ -319,14 +323,6 @@ export class Game {
             this.aliveCount--;
             this.aliveCountDirty = true;
         }
-    }
-
-    addBody(body): void {
-        Composite.add(this.engine.world, body);
-    }
-
-    removeBody(body): void {
-        Composite.remove(this.engine.world, body);
     }
 
     end(): void {

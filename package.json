@@ -21,10 +21,10 @@
   },
   "homepage": "https://survivreloaded.com",
   "dependencies": {
+    "arcade-physics": "^0.1.0",
     "bit-buffer": "^0.2.5",
     "cookie": "^0.5.0",
     "live-directory": "^3.0.3",
-    "matter-js": "^0.19.0",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.20.0"
   },
   "devDependencies": {

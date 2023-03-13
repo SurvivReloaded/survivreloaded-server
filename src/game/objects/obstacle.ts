@@ -1,10 +1,17 @@
-import { Body, type Vector } from "matter-js";
-
-import { bodyFromCollisionData, Item, LootTables, ObjectKind, type SurvivBitStream, weightedRandom } from "../../utils";
+import {
+    bodyFromCollisionData,
+    CollisionType,
+    Item,
+    LootTables,
+    ObjectKind,
+    type SurvivBitStream,
+    weightedRandom
+} from "../../utils";
 import { type Game } from "../game";
 import { type Player } from "./player";
 import { Loot } from "./loot";
 import { GameObject } from "../gameObject";
+import { type Vector2 } from "arcade-physics/lib/math/Vector2";
 
 export class Obstacle extends GameObject {
 
@@ -44,7 +51,7 @@ export class Obstacle extends GameObject {
 
     constructor(id: number,
                 typeString: string,
-                position: Vector,
+                position: Vector2,
                 layer: number,
                 orientation: number,
                 game: Game,
@@ -69,11 +76,7 @@ export class Obstacle extends GameObject {
         this.collidable = data.collidable;
         this.reflectBullets = data.reflectBullets;
         this.destructible = this.damageable = data.destructible;
-        this.body = bodyFromCollisionData(data.collision, position, orientation, scale);
-        if(this.body != null) {
-            if(!this.collidable) this.body.isSensor = true;
-            this.game!.addBody(this.body);
-        }
+        this.body = bodyFromCollisionData(this.game!, data.collision, position, orientation, scale);
 
         // TODO Testing code, delete me
         this.collision = data.collision;
@@ -87,7 +90,7 @@ export class Obstacle extends GameObject {
             };
             this.interactable = true;
             this.interactionRad = data.door.interactionRad;
-            this.body!.isSensor = true; // TODO THIS DISABLES DOOR COLLISIONS; remove once door collisions are implemented
+            if(this.body) this.body!.destroy(); // TODO THIS DISABLES DOOR COLLISIONS; remove once door collisions are implemented
         }
 
         this.isButton = data.button !== undefined;
@@ -119,7 +122,7 @@ export class Obstacle extends GameObject {
         }
     }
 
-    get position(): Vector {
+    get position(): Vector2 {
         return this._position;
     }
 
@@ -130,7 +133,7 @@ export class Obstacle extends GameObject {
             this.dead = true;
             this.collidable = false;
             if(this.door) this.door.canUse = false;
-            this.game!.removeBody(this.body);
+            this.body!.destroy();
             this.game!.fullDirtyObjects.push(this);
             for(const item of this.loot) {
                 const loot: Loot = new Loot(this.game!.nextObjectId, item.type, this.position, 0, this.game!, item.count);
@@ -142,7 +145,20 @@ export class Obstacle extends GameObject {
             const oldScale: number = this.scale;
             if(this.minScale < 1) this.scale = this.healthT * (this.maxScale - this.minScale) + this.minScale;
             const scaleFactor: number = this.scale / oldScale;
-            Body.scale(this.body!, scaleFactor, scaleFactor);
+            if(this.collision.type === CollisionType.Rectangle) {
+                const centerX = this.body!.x + this.body!.width / 2;
+                const centerY = this.body!.y + this.body!.height / 2;
+
+                // Scale the width and height of the rectangle
+                this.body!.width *= scaleFactor;
+                this.body!.height *= scaleFactor;
+
+                // Calculate the new coordinates of the top-left corner of the rectangle
+                this.body!.x = centerX - this.body!.width / 2;
+                this.body!.y = centerY - this.body!.height / 2;
+            } else if(this.collision.type === CollisionType.Circle) {
+                this.body!.radius = this.body!.radius * scaleFactor;
+            }
             this.game!.partialDirtyObjects.push(this);
         }
     }

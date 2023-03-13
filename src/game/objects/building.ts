@@ -1,7 +1,7 @@
-import { type Vector } from "matter-js";
-
 import { bodyFromCollisionData, ObjectKind, type SurvivBitStream } from "../../utils";
 import { GameObject } from "../gameObject";
+import { type Vector2 } from "arcade-physics/lib/math/Vector2";
+import { type Game } from "../game";
 
 export class Building extends GameObject {
 
@@ -13,17 +13,18 @@ export class Building extends GameObject {
 
     constructor(id: number,
                 typeString: string,
-                position: Vector,
+                position: Vector2,
                 layer: number,
                 orientation: number,
+                game: Game,
                 showOnMap: boolean,
                 data) {
-        super(id, typeString, position, layer, orientation);
+        super(id, typeString, position, layer, orientation, game);
         this.kind = ObjectKind.Building;
 
         this.showOnMap = showOnMap;
         if(data.mapObstacleBounds) {
-            this.body = bodyFromCollisionData(data.mapObstacleBounds[0], this.position);
+            this.body = bodyFromCollisionData(this.game!, data.mapObstacleBounds[0], this.position);
         }
     }
 
